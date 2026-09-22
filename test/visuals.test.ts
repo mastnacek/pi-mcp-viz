@@ -108,8 +108,9 @@ test("modal card: framed, informative and width-safe", () => {
 	const lines = card.render(100);
 	const text = lines.join("\n");
 
-	assert.match(text, /╭/);
-	assert.match(text, /╰/);
+	assert.match(text, /╔/);
+	assert.match(text, /╚/);
+	assert.match(text, /╟/);
 	assert.match(text, /MCP/);
 	assert.match(text, /KB/);
 	assert.match(text, /kb_search/);
@@ -120,7 +121,23 @@ test("modal card: framed, informative and width-safe", () => {
 	// sidebar-style border is the first thing a misaligned width breaks.
 	const widths = new Set(lines.map((line) => visibleWidth(line)));
 	assert.equal(widths.size, 1, `uneven modal frame: ${[...widths].join(",")}`);
-	assert.equal([...widths][0], 68); // MAX_WIDTH, terminal is wide enough
+	assert.equal([...widths][0], 90); // MAX_WIDTH (one third wider than 68), terminal is wide enough
+	card.dispose();
+});
+
+test("modal card: clamps to small terminals without breaking the frame", () => {
+	const card = new McpModalCard(theme, RECORD, {
+		delayMs: 5000,
+		maxHits: 5,
+		onDone: () => {},
+		requestRender: () => {},
+	});
+	for (const width of [44, 60, 72, 120]) {
+		const lines = card.render(width);
+		const widths = new Set(lines.map((line) => visibleWidth(line)));
+		assert.equal(widths.size, 1, `uneven frame at width ${width}: ${[...widths].join(",")}`);
+		assert.ok([...widths][0] <= width, `frame wider than ${width}`);
+	}
 	card.dispose();
 });
 

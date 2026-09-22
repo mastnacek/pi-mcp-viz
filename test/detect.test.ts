@@ -11,7 +11,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { CONFIG_ENV, loadConfig, normalizeConfig, saveConfig, serverAllowed } from "../src/config.js";
+import { CONFIG_ENV, DEFAULT_CONFIG, loadConfig, normalizeConfig, saveConfig, serverAllowed } from "../src/config.js";
 import { MCP_JSON_ENV, classifyTool, loadMcpServerNames, resetServerCache } from "../src/mcp.js";
 
 const SERVERS = ["knowledge_base", "openrouter", "metaculus", "hf_mcp_server", "lotusscript_lsp", "mcp"];
@@ -74,7 +74,9 @@ test("servers are read from mcp.json, including a fixture path", () => {
 test("config defaults, clamping and filters", () => {
 	const config = normalizeConfig({});
 	assert.equal(config.enabled, true);
-	assert.deepEqual(config.variants, { entry: true, modal: false, status: true });
+	// Shipped defaults: the modal card only, 2 s.
+	assert.deepEqual(config.variants, { entry: false, modal: true, status: false });
+	assert.equal(config.modalDelayMs, 2000);
 
 	const clamped = normalizeConfig({
 		modalDelayMs: 5,
@@ -88,8 +90,8 @@ test("config defaults, clamping and filters", () => {
 	assert.equal(clamped.statusTtlMs, 0);
 	assert.equal(clamped.detail, 1);
 	assert.equal(clamped.maxHits, 50);
-	assert.equal(clamped.variants.modal, true);
-	assert.equal(clamped.variants.entry, true);
+	// A partial `variants` object keeps every other default.
+	assert.deepEqual(clamped.variants, DEFAULT_CONFIG.variants);
 	assert.deepEqual(clamped.includeServers, ["knowledge_base"]);
 
 	assert.equal(serverAllowed(normalizeConfig({}), "anything"), true);

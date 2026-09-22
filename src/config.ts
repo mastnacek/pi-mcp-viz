@@ -16,8 +16,10 @@ export const VARIANT_NAMES: readonly VariantName[] = ["entry", "modal", "status"
 
 export const DEFAULT_CONFIG: McpVizConfig = {
 	enabled: true,
-	variants: { entry: true, modal: false, status: true },
-	modalDelayMs: 2400,
+	// Shipped default: the modal card only. It is the variant that makes an MCP
+	// call visible without touching the transcript or the footer.
+	variants: { entry: false, modal: true, status: false },
+	modalDelayMs: 2000,
 	statusTtlMs: 8000,
 	liveStatus: true,
 	includeServers: [],

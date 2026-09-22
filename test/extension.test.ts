@@ -146,10 +146,17 @@ function useTempEnvironment(params: { variants?: Partial<Record<"entry" | "modal
 	const mcpJson = join(dir, "mcp.json");
 	writeFileSync(mcpJson, JSON.stringify({ mcpServers: { knowledge_base: {}, openrouter: {} } }), "utf8");
 	process.env[MCP_JSON_ENV] = mcpJson;
-	saveConfig({ ...DEFAULT_CONFIG, variants: { ...DEFAULT_CONFIG.variants, ...params.variants } });
+	// Variants are pinned explicitly so the wiring tests do not depend on which
+	// variant the package ships as its default.
+	saveConfig({ ...DEFAULT_CONFIG, variants: { entry: true, modal: false, status: true, ...params.variants } });
 	resetServerCache();
 	return dir;
 }
+
+test("the shipped defaults are modal-only with a 2 s delay", () => {
+	assert.deepEqual(DEFAULT_CONFIG.variants, { entry: false, modal: true, status: false });
+	assert.equal(DEFAULT_CONFIG.modalDelayMs, 2000);
+});
 
 test("a KB search produces a card, a status line, totals and a trace", async () => {
 	const dir = useTempEnvironment({});

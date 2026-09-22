@@ -30,9 +30,10 @@ listens.
 ## The three visualization variants
 
 All three are independent and can be combined. `/mcp-viz variant <name>` toggles
-them at runtime.
+them at runtime. **The shipped default is the modal alone** (2 s delay); the other
+variants are opt-in.
 
-### 1. `entry` — transcript card (default on)
+### 1. `entry` — transcript card (default off)
 
 Durable, inline in the conversation like a built-in tool row, expandable with the
 tools-expand keybinding, and **never sent to the model** (it is a custom entry,
@@ -52,25 +53,39 @@ interactive-only.
 Detail level is configurable: `0` = one line, `1` = documents listed, `2` = also
 the raw arguments.
 
-### 2. `modal` — auto-dismissing overlay (default off)
+### 2. `modal` — auto-dismissing overlay (default on)
 
 A floating card in the top-right corner that removes itself after `modalDelayMs`
-(2.4 s by default). Any key dismisses it early. It never takes keyboard focus, so
-it cannot swallow typing, and it hides itself on terminals narrower than 72
+(**2 s by default**). Any key dismisses it early. It never takes keyboard focus,
+so it cannot swallow typing, and it hides itself on terminals narrower than 72
 columns.
 
+The card is styled through the active theme's semantic colour keys, which under
+the Linkarzu palette resolve to that theme's own colours: the double frame and
+the title use its green (`borderAccent`/`accent`), the tool name its cyan
+(`toolTitle`), the header bar sits on `selectedBg` and the body on
+`userMessageBg`. Inner colour resets are re-opened so the background fill stays
+solid across the whole row.
+
 ```text
-╭─ MCP · KB ──────────────────────────────────────────╮
-│ kb_search “NotesDocument GetItemValue array”        │
-│ 3 hits · 3 docs · 1 334 tok · 940ms                 │
-│ lotus-notes                                         │
-│   Usage — GetItemValue (NotesDocument) 1.00 800 tok │
-│   Examples                             0.90 434 tok │
-│ Esc · 1.8s                                          │
-╰─────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════════════╗
+║ MCP · KB                                             1 939 tok       ║
+╟──────────────────────────────────────────────────────────────────────╢
+║ kb_search “NotesDocument GetItemValue array of strings”              ║
+║ 10 hits · 10 docs · 1 939 tok · 2.8s · lotus-notes                   ║
+║   Examples: GetItemValueDateTimeArray method 1.00 329 tok            ║
+║   Usage — GetItemValue (NotesDocument - LotusScript) 0.97 177 tok    ║
+║   GetItemValueDateTimeArray (NotesDocument - LotusScript) 0.97 82 tok║
+║   … +7 more                                                          ║
+║ Esc · 2.0s                                                 mcp-viz   ║
+╚══════════════════════════════════════════════════════════════════════╝
 ```
 
-### 3. `status` — footer badge (default on)
+It is 90 columns wide (a third wider than the original 68) and clamps to the
+terminal width, so the frame stays aligned on smaller screens. A failed call
+switches the frame and title to the theme's `error` colour.
+
+### 3. `status` — footer badge (default off)
 
 One dim line, updated live while the call runs (with elapsed time) and replaced
 by the summary afterwards, then cleared on `statusTtlMs`:
