@@ -19,7 +19,7 @@ export const DEFAULT_CONFIG: McpVizConfig = {
 	// Shipped default: the modal card only. It is the variant that makes an MCP
 	// call visible without touching the transcript or the footer.
 	variants: { entry: false, modal: true, status: false },
-	modalDelayMs: 2000,
+	modalDelayMs: 3000,
 	statusTtlMs: 8000,
 	liveStatus: true,
 	includeServers: [],

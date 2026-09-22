@@ -153,9 +153,9 @@ function useTempEnvironment(params: { variants?: Partial<Record<"entry" | "modal
 	return dir;
 }
 
-test("the shipped defaults are modal-only with a 2 s delay", () => {
+test("the shipped defaults are modal-only with a 3 s delay", () => {
 	assert.deepEqual(DEFAULT_CONFIG.variants, { entry: false, modal: true, status: false });
-	assert.equal(DEFAULT_CONFIG.modalDelayMs, 2000);
+	assert.equal(DEFAULT_CONFIG.modalDelayMs, 3000);
 });
 
 test("a KB search produces a card, a status line, totals and a trace", async () => {

@@ -74,9 +74,9 @@ test("servers are read from mcp.json, including a fixture path", () => {
 test("config defaults, clamping and filters", () => {
 	const config = normalizeConfig({});
 	assert.equal(config.enabled, true);
-	// Shipped defaults: the modal card only, 2 s.
+	// Shipped defaults: the modal card only, 3 s.
 	assert.deepEqual(config.variants, { entry: false, modal: true, status: false });
-	assert.equal(config.modalDelayMs, 2000);
+	assert.equal(config.modalDelayMs, 3000);
 
 	const clamped = normalizeConfig({
 		modalDelayMs: 5,

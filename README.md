@@ -30,7 +30,7 @@ listens.
 ## The three visualization variants
 
 All three are independent and can be combined. `/mcp-viz variant <name>` toggles
-them at runtime. **The shipped default is the modal alone** (2 s delay); the other
+them at runtime. **The shipped default is the modal alone** (3 s delay); the other
 variants are opt-in.
 
 ### 1. `entry` — transcript card (default off)
@@ -56,7 +56,7 @@ the raw arguments.
 ### 2. `modal` — auto-dismissing overlay (default on)
 
 A floating card in the top-right corner that removes itself after `modalDelayMs`
-(**2 s by default**). Any key dismisses it early. It never takes keyboard focus,
+(**3 s by default**). Any key dismisses it early. It never takes keyboard focus,
 so it cannot swallow typing, and it hides itself on terminals narrower than 72
 columns.
 
@@ -77,7 +77,7 @@ solid across the whole row.
 ║   Usage — GetItemValue (NotesDocument - LotusScript) 0.97 177 tok    ║
 ║   GetItemValueDateTimeArray (NotesDocument - LotusScript) 0.97 82 tok║
 ║   … +7 more                                                          ║
-║ Esc · 2.0s                                                 mcp-viz   ║
+║ Esc · 3.0s                                                 mcp-viz   ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
