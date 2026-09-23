@@ -58,6 +58,7 @@ function makeHarness(): Harness {
 
 	const ctx = {
 		hasUI: true,
+		mode: "tui" as const,
 		cwd: process.cwd(),
 		sessionManager: { getBranch: () => [] },
 		ui: {

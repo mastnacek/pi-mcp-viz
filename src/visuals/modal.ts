@@ -228,6 +228,7 @@ export function showCallModal(
 	record: McpCallRecord,
 	config: { modalDelayMs: number; maxHits: number },
 ): void {
+	if (!ctx.hasUI || ctx.mode !== "tui") return;
 	void ctx.ui
 		.custom<undefined>(
 			(tui: TUI, theme: Theme, _keybindings: KeybindingsManager, done: (value: undefined) => void) =>
