@@ -229,7 +229,11 @@ function completeServer(deps: CommandDeps, tokens: string[], normalized: string,
 	if (!trailingSpace && tokens.length === 2) {
 		return ["include", "exclude", "clear"]
 			.filter((value) => value.startsWith(action))
-			.map((value) => ({ value: `server ${value}`, label: `server ${value}`, description: "" }));
+			.map((value) => ({
+				value: value === "clear" ? `server ${value}` : `server ${value} `,
+				label: `server ${value}`,
+				description: "",
+			}));
 	}
 	return deps
 		.getServers()
@@ -242,9 +246,18 @@ function completeServer(deps: CommandDeps, tokens: string[], normalized: string,
 }
 
 function completeFirstLevel(normalized: string): AutocompleteItem[] {
-	return Object.entries(COMMAND_DOCS)
-		.filter(([name]) => name.startsWith(normalized))
-		.map(([value, description]) => ({ value, label: value, description }));
+	const NON_TERMINAL = new Set(["variant", "server", "modal", "ttl", "detail"]);
+	const items: AutocompleteItem[] = [];
+	for (const [name, description] of Object.entries(COMMAND_DOCS)) {
+		if (name.startsWith(normalized)) {
+			items.push({
+				value: NON_TERMINAL.has(name) ? `${name} ` : name,
+				label: name,
+				description,
+			});
+		}
+	}
+	return items;
 }
 
 /** Register the control command. */
