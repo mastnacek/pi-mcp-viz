@@ -213,75 +213,180 @@ const SUBCOMMANDS: Record<string, SubHandler> = {
 
 // ---------------------------------------------------------- autocompletion
 
-function completeVariant(deps: CommandDeps, normalized: string, trailingSpace: boolean, tokenCount: number) {
-	const items = VARIANT_NAMES.map((name) => ({
-		value: `variant ${name}`,
-		label: `variant ${name}`,
-		description: deps.getConfig().variants[name] ? "currently on" : "currently off",
-	}));
-	void trailingSpace;
-	void tokenCount;
-	return items.filter((item) => item.value.toLowerCase().startsWith(normalized));
+/** Subcommands that take parameters, so their row keeps the trailing space. */
+const NON_TERMINAL = new Set(["variant", "server", "modal", "ttl", "detail"]);
+
+/**
+ * Subcommands whose parameters are enumerable. The engine closes the picker on
+ * Tab and forces file completion once a space exists, so these MUST return their
+ * parameter list as soon as the token is fully typed (the skill's Lazy Parameter
+ * Completion rule) instead of waiting for the trailing space.
+ */
+const LAZY_EXPAND = new Set(["variant", "server", "detail"]);
+
+/** Variants that are currently on, for the parent-level annotation. */
+function variantsOn(config: McpVizConfig): string {
+	const on = VARIANT_NAMES.filter((name) => config.variants[name]);
+	return on.length > 0 ? on.join("+") : "none";
 }
 
-function completeServer(deps: CommandDeps, tokens: string[], normalized: string, trailingSpace: boolean) {
-	const action = (tokens[1] ?? "").toLowerCase();
-	if (!trailingSpace && tokens.length === 2) {
-		return ["include", "exclude", "clear"]
-			.filter((value) => value.startsWith(action))
-			.map((value) => ({
-				value: value === "clear" ? `server ${value}` : `server ${value} `,
-				label: `server ${value}`,
-				description: "",
-			}));
+/**
+ * Current-value suffix for a first-level row. Display only: markers live in
+ * `label`/`description`, never in `value` (inserted verbatim), never as ANSI.
+ */
+function parentState(key: string, config: McpVizConfig): string {
+	switch (key) {
+		case "on":
+			return config.enabled ? " · ● ZAPNUTO" : "";
+		case "off":
+			return config.enabled ? "" : " · ○ VYPNUTO";
+		case "variant":
+			return ` (nyní: ${variantsOn(config)})`;
+		case "modal":
+			return ` (nyní: ${config.modalDelayMs} ms)`;
+		case "ttl":
+			return ` (nyní: ${config.statusTtlMs} ms)`;
+		case "detail":
+			return ` (nyní: ${config.detail})`;
+		case "server": {
+			const parts: string[] = [];
+			if (config.includeServers.length > 0) parts.push(`include ${config.includeServers.join(", ")}`);
+			if (config.excludeServers.length > 0) parts.push(`exclude ${config.excludeServers.join(", ")}`);
+			return ` (nyní: ${parts.length > 0 ? parts.join(" · ") : "vše"})`;
+		}
+		default:
+			return "";
 	}
-	return deps
-		.getServers()
-		.map((server) => ({
-			value: `server ${action} ${server}`,
-			label: `server ${action} ${server}`,
-			description: "server from mcp.json",
+}
+
+function completeFirstLevel(deps: CommandDeps, normalized: string): AutocompleteItem[] {
+	const config = deps.getConfig();
+	const items: AutocompleteItem[] = [];
+	for (const [name, description] of Object.entries(COMMAND_DOCS)) {
+		if (!name.startsWith(normalized)) continue;
+		items.push({
+			value: NON_TERMINAL.has(name) ? `${name} ` : name,
+			label: name,
+			description: `${description}${parentState(name, config)}`,
+		});
+	}
+	return items;
+}
+
+/** `/mcp-viz variant <name>` — the active variant carries `✓` and `● AKTIVNÍ`. */
+function completeVariant(deps: CommandDeps, normalized: string): AutocompleteItem[] {
+	const config = deps.getConfig();
+	return VARIANT_NAMES.map((name) => {
+		const active = config.variants[name];
+		return {
+			value: `variant ${name}`,
+			label: active ? `${name} ✓` : name,
+			description: `${active ? "Zapnuto" : "Vypnuto"} — Tab přepne${active ? " · ● AKTIVNÍ" : ""}`,
+		};
+	}).filter((item) => item.value.toLowerCase().startsWith(normalized));
+}
+
+/** `/mcp-viz detail <0|1|2>` — enumerable, so it expands without a trailing space. */
+function completeDetail(deps: CommandDeps, normalized: string): AutocompleteItem[] {
+	const current = deps.getConfig().detail;
+	const levels: ReadonlyArray<readonly [0 | 1 | 2, string]> = [
+		[0, "kompaktní karta"],
+		[1, "karta + seznam dokumentů"],
+		[2, "karta + argumenty + dokumenty"],
+	];
+	return levels
+		.map(([value, text]) => ({
+			value: `detail ${value}`,
+			label: current === value ? `${value} ✓` : String(value),
+			description: `${text}${current === value ? " · ● AKTIVNÍ" : ""}`,
 		}))
 		.filter((item) => item.value.toLowerCase().startsWith(normalized));
 }
 
-function completeFirstLevel(normalized: string): AutocompleteItem[] {
-	const NON_TERMINAL = new Set(["variant", "server", "modal", "ttl", "detail"]);
-	const items: AutocompleteItem[] = [];
-	for (const [name, description] of Object.entries(COMMAND_DOCS)) {
-		if (name.startsWith(normalized)) {
-			items.push({
-				value: NON_TERMINAL.has(name) ? `${name} ` : name,
-				label: name,
-				description,
-			});
-		}
+/** `/mcp-viz server <include|exclude|clear> [name]`. */
+function completeServer(
+	deps: CommandDeps,
+	tokens: string[],
+	normalized: string,
+	trailingSpace: boolean,
+): AutocompleteItem[] {
+	const config = deps.getConfig();
+	const action = (tokens[1] ?? "").toLowerCase();
+	// Name level only once the action token is followed by a space or a name.
+	const atNameLevel = tokens.length >= 3 || (tokens.length === 2 && trailingSpace);
+
+	if (!atNameLevel) {
+		const actions = [
+			{
+				name: "include",
+				description: `Povolit jen vybrané servery${
+					config.includeServers.length > 0 ? ` (nyní: ${config.includeServers.join(", ")})` : ""
+				}`,
+			},
+			{
+				name: "exclude",
+				description: `Zakázat vybrané servery${
+					config.excludeServers.length > 0 ? ` (nyní: ${config.excludeServers.join(", ")})` : ""
+				}`,
+			},
+			{ name: "clear", description: "Zrušit filtry serverů (vše povoleno)" },
+		];
+		return actions
+			.filter((entry) => entry.name.startsWith(action))
+			.map((entry) => ({
+				value: entry.name === "clear" ? "server clear" : `server ${entry.name} `,
+				label: `server ${entry.name}`,
+				description: entry.description,
+			}));
 	}
-	return items;
+
+	const included = new Set(config.includeServers);
+	const excluded = new Set(config.excludeServers);
+	return deps
+		.getServers()
+		.map((server) => {
+			const active =
+				action === "include" ? included.has(server) : action === "exclude" ? excluded.has(server) : false;
+			return {
+				value: `server ${action} ${server}`,
+				label: active ? `${server} ✓` : server,
+				description: `server z mcp.json${active ? " · ● AKTIVNÍ" : ""}`,
+			};
+		})
+		.filter((item) => item.value.toLowerCase().startsWith(normalized));
+}
+
+/** Build the `getArgumentCompletions` function for `/mcp-viz`. */
+export function createCompletions(deps: CommandDeps) {
+	return (prefix: string): AutocompleteItem[] | null => {
+		const tokens = prefix.split(/\s+/).filter(Boolean);
+		const trailingSpace = /\s$/.test(prefix);
+		const normalized = tokens.join(" ").toLowerCase();
+		const head = (tokens[0] ?? "").toLowerCase();
+		const deeper =
+			tokens.length > 1 ||
+			(trailingSpace && tokens.length === 1) ||
+			(tokens.length === 1 && LAZY_EXPAND.has(head));
+
+		if (!deeper) {
+			const items = completeFirstLevel(deps, normalized);
+			return items.length > 0 ? items : null;
+		}
+
+		let items: AutocompleteItem[] = [];
+		if (head === "variant") items = completeVariant(deps, normalized);
+		else if (head === "detail") items = completeDetail(deps, normalized);
+		else if (head === "server") items = completeServer(deps, tokens, normalized, trailingSpace);
+
+		return items.length > 0 ? items : null;
+	};
 }
 
 /** Register the control command. */
 export function registerMcpVizCommand(pi: ExtensionAPI, deps: CommandDeps): void {
 	pi.registerCommand("mcp-viz", {
 		description: "Visualize MCP activity: transcript cards, modal or status badge + token counters",
-		getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
-			const tokens = prefix.split(/\s+/).filter(Boolean);
-			const trailingSpace = /\s$/.test(prefix);
-			const normalized = tokens.join(" ").toLowerCase();
-			const [head = ""] = tokens;
-			const deeper = tokens.length > 1 || (trailingSpace && tokens.length === 1);
-
-			if (!deeper) {
-				const items = completeFirstLevel(normalized);
-				return items.length > 0 ? items : null;
-			}
-
-			let items: AutocompleteItem[] = [];
-			if (head.toLowerCase() === "variant") items = completeVariant(deps, normalized, trailingSpace, tokens.length);
-			else if (head.toLowerCase() === "server") items = completeServer(deps, tokens, normalized, trailingSpace);
-
-			return items.length > 0 ? items : null;
-		},
+		getArgumentCompletions: createCompletions(deps),
 
 		handler: async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
 			const tokens = args.trim().split(/\s+/).filter(Boolean);

@@ -49,6 +49,13 @@ export default function mcpViz(pi: ExtensionAPI): void {
 	let liveTimer: ReturnType<typeof setInterval> | undefined;
 	let statusTimer: ReturnType<typeof setTimeout> | undefined;
 	let statusKey = STATUS_KEY;
+	/** Unsubscribers from every `pi.on()`; drained on session_shutdown. */
+	const unsubscribers: Array<() => void> = [];
+
+	/** Retain a `pi.on()` return value for shutdown cleanup (skill §4). */
+	const track = (result: unknown): void => {
+		if (typeof result === "function") unsubscribers.push(result as () => void);
+	};
 
 	const patchConfig = (patch: Partial<McpVizConfig>): McpVizConfig => {
 		config = { ...config, ...patch };
@@ -134,16 +141,16 @@ export default function mcpViz(pi: ExtensionAPI): void {
 
 	// ---------------------------------------------------------------- events
 
-	pi.on("session_start", async (_event, ctx) => {
+	track(pi.on("session_start", async (_event, ctx) => {
 		config = loadConfig();
 		resetServerCache();
 		totals = restoreTotals(ctx.sessionManager.getBranch());
 		pending.clear();
 		recent.clear();
 		writeTrace({ event: "session_start", servers: knownServers(), totals });
-	});
+	}));
 
-	pi.on("tool_execution_start", async (event, ctx) => {
+	track(pi.on("tool_execution_start", async (event, ctx) => {
 		if (!config.enabled) return;
 		const target = classifyTool(event.toolName);
 		if (target === undefined) return;
@@ -164,9 +171,9 @@ export default function mcpViz(pi: ExtensionAPI): void {
 		pending.start(record);
 		writeTrace({ event: "start", id: record.id, server: target.server, tool: target.tool, args: record.argsSummary });
 		refreshLiveStatus(ctx);
-	});
+	}));
 
-	pi.on("tool_execution_end", async (event, ctx) => {
+	track(pi.on("tool_execution_end", async (event, ctx) => {
 		if (!config.enabled) return;
 		const target = classifyTool(event.toolName);
 		if (target === undefined) return;
@@ -223,7 +230,7 @@ export default function mcpViz(pi: ExtensionAPI): void {
 			}
 		}
 		refreshLiveStatus(ctx);
-	});
+	}));
 
 	pi.on("session_shutdown", async () => {
 		stopLiveTimer();
@@ -232,6 +239,7 @@ export default function mcpViz(pi: ExtensionAPI): void {
 			statusTimer = undefined;
 		}
 		pending.clear();
+		while (unsubscribers.length > 0) unsubscribers.pop()?.();
 	});
 
 	// --------------------------------------------------------------- command

@@ -116,15 +116,12 @@ navigation and resume all rebuild the same numbers from the branch.
 ## Install
 
 ```bash
-# settings.json (global) — local path form
-{
-  "packages": [
-    { "source": "D:/01_programovani/pi/plugins/pi-mcp-viz" }
-  ]
-}
+pi install git:github.com/mastnacek/pi-mcp-viz
 ```
 
-No `extensions` filter is needed: the package manifest points at `./index.ts`.
+Installed from the GitHub repository, never from a local development checkout
+(AGENTS.md §8): a local path drifts from the repo and defeats distribution.
+No `extensions` filter is needed — the package manifest points at `./index.ts`.
 Restart pi afterwards.
 
 ## Commands
@@ -142,6 +139,14 @@ Restart pi afterwards.
 /mcp-viz reset                      # zero the session counters
 ```
 
+The command menu annotates itself with the value actually in effect — `on`/`off`
+carry ` · ● ZAPNUTO` / ` · ○ VYPNUTO`, the value settings carry `(nyní: …)`, and
+the active `variant` / `detail` / `server` row carries `✓` plus ` · ● AKTIVNÍ`.
+`variant`, `detail` and `server` expand their parameters as soon as the token is
+fully typed (Tab closes the picker, so the trailing-space form alone would strand
+the user). Markers are display-only: `item.value` stays a clean command token and
+no ANSI is embedded.
+
 Config lives in `~/.pi/agent/pi-mcp-viz.json`; every option has a default, and an
 invalid value is clamped rather than rejected.
 
@@ -154,7 +159,8 @@ invalid value is clamped rather than rejected.
 | `ctx.ui.custom(..., { overlay: true, onHandle })` | variant 2: floating card, `handle.unfocus()` so input is never stolen |
 | `ctx.ui.setStatus(key, text)` | variant 3: footer badge, cleared on a timer |
 | `ctx.sessionManager.getBranch()` | restore session totals from the current branch |
-| `pi.registerCommand` | `/mcp-viz`, with lazy autocompletion (servers are read from mcp.json on demand) |
+| `pi.registerCommand` | `/mcp-viz`, with lazy state-annotated autocompletion (servers are read from mcp.json on demand) |
+| `pi.on(...)` return value | every subscription is retained and drained on `session_shutdown` |
 
 Events fire in parallel-tool mode too: a start event that never matches an end
 event is recovered by tool name, so a card is still produced with real duration.
@@ -162,10 +168,10 @@ event is recovered by tool name, so a card is still produced with real duration.
 ## Testing
 
 ```bash
-npm test        # tsc && node --test dist/test/*.test.js
+npm test        # tsc && node --test "dist/test/*.test.js"
 ```
 
-30 tests, no terminal required:
+41 tests, no terminal required:
 
 | File | Covers |
 |---|---|
@@ -173,6 +179,7 @@ npm test        # tsc && node --test dist/test/*.test.js
 | `test/tokens.test.ts` | chars/4 estimation, KB `results[]` and whole-document payloads, gateway unwrapping, malformed input |
 | `test/visuals.test.ts` | rendered card/modal strings, width safety, auto-dismiss timer, status line wording |
 | `test/extension.test.ts` | the real extension driven by a mock ExtensionAPI: entries, status writes, modal call, trace log, non-MCP tools ignored, `/mcp-viz` subcommands |
+| `test/completions.test.ts` | command menu: trailing space contract, lazy parameter expansion, current-value `✓` / `● AKTIVNÍ` markers |
 
 Set `PI_MCP_VIZ_LOG`, `PI_MCP_VIZ_CONFIG` and `PI_MCP_VIZ_MCP_JSON` to redirect
 the trace, config and server list (used by the tests and by headless runs).

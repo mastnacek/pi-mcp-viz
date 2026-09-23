@@ -1,6 +1,6 @@
 {
   "name": "pi-mcp-viz",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Visualizes MCP server activity in Pi: transcript cards, auto-dismissing modals and a status-line badge, with a token counter for documents read by the MCP servers (knowledge base included).",
   "type": "module",
   "main": "index.ts",
@@ -36,7 +36,7 @@
   "scripts": {
     "build": "tsc",
     "check": "tsc --noEmit",
-    "test": "tsc && node --test dist/test/"
+    "test": "tsc && node --test \"dist/test/*.test.js\""
   },
   "pi": {
     "extensions": [
