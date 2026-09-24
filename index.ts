@@ -57,9 +57,11 @@ export default function mcpViz(pi: ExtensionAPI): void {
 		if (typeof result === "function") unsubscribers.push(result as () => void);
 	};
 
-	const patchConfig = (patch: Partial<McpVizConfig>): McpVizConfig => {
+	let currentCwd: string | undefined;
+
+	const patchConfig = (patch: Partial<McpVizConfig>, isGlobal = false): McpVizConfig => {
 		config = { ...config, ...patch };
-		saveConfig(config);
+		saveConfig(config, isGlobal, currentCwd);
 		return config;
 	};
 
@@ -142,7 +144,8 @@ export default function mcpViz(pi: ExtensionAPI): void {
 	// ---------------------------------------------------------------- events
 
 	track(pi.on("session_start", async (_event, ctx) => {
-		config = loadConfig();
+		currentCwd = ctx.cwd;
+		config = loadConfig(ctx.cwd);
 		resetServerCache();
 		totals = restoreTotals(ctx.sessionManager.getBranch());
 		pending.clear();

@@ -1,45 +1,21 @@
-/**
- * /mcp-viz — control surface.
- *
- * Follows the house pattern: a documentation dictionary drives the first-level
- * autocomplete and the help banner, deeper levels load data lazily (variant
- * names are static, server names come from mcp.json on demand). The command
- * never throws at the user: unknown input gets a warning with the help hint.
- *
- * Subcommands are dispatched through a table of small handlers rather than one
- * large switch, so each of them stays readable and independently testable.
- */
-
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { VARIANT_NAMES, describeConfig } from "./config.js";
 import { fmtInt, fmtMs, fmtTokens } from "./tokens.js";
 import type { McpCallRecord, McpVizConfig, SessionTotals, VariantName } from "./types.js";
+import { COMMAND_DOCS, createCompletions } from "./completions.js";
 
-export const COMMAND_DOCS: Record<string, string> = {
-	on: "enable MCP visualization",
-	off: "disable MCP visualization",
-	variant: "toggle a visual variant (entry | modal | status)",
-	modal: "set modal auto-dismiss delay in ms",
-	ttl: "set how long the status badge stays (ms, 0 = until next call)",
-	detail: "set card detail level (0 compact | 1 show documents | 2 show args)",
-	server: "include or exclude an MCP server",
-	status: "show config and session token counters",
-	tail: "list the most recent MCP calls",
-	reset: "reset session counters",
-	help: "show this reference",
-};
+export { COMMAND_DOCS, createCompletions };
 
 export interface CommandDeps {
 	getConfig: () => McpVizConfig;
-	patchConfig: (patch: Partial<McpVizConfig>) => McpVizConfig;
+	patchConfig: (patch: Partial<McpVizConfig>, isGlobal?: boolean) => McpVizConfig;
 	getTotals: () => SessionTotals;
 	getRecent: () => McpCallRecord[];
 	resetTotals: () => void;
 	getServers: () => string[];
 }
 
-type SubHandler = (deps: CommandDeps, rest: string[], ctx: ExtensionCommandContext) => void;
+type SubHandler = (deps: CommandDeps, rest: string[], ctx: ExtensionCommandContext, isGlobal?: boolean) => void;
 
 function flagOnOff(value: string | undefined): boolean | undefined {
 	if (value === undefined || value === "") return undefined;
@@ -117,53 +93,51 @@ function helpLines(config: McpVizConfig): string {
 	].join("\n");
 }
 
-// ------------------------------------------------------------- subcommands
-
-const handleVariant: SubHandler = (deps, rest, ctx) => {
+const handleVariant: SubHandler = (deps, rest, ctx, isGlobal) => {
 	const name = parseVariant((rest[0] ?? "").toLowerCase());
 	if (name === undefined) {
 		ctx.ui.notify(`Neznámá varianta. Použij: ${VARIANT_NAMES.join(" | ")}`, "warning");
 		return;
 	}
 	const enabled = flagOnOff(rest[1]) ?? !deps.getConfig().variants[name];
-	deps.patchConfig({ variants: { ...deps.getConfig().variants, [name]: enabled } });
-	ctx.ui.notify(`varianta ${name} ${enabled ? "on" : "off"}`, "info");
+	deps.patchConfig({ variants: { ...deps.getConfig().variants, [name]: enabled } }, isGlobal);
+	ctx.ui.notify(`varianta ${name} ${enabled ? "on" : "off"}${isGlobal ? " (globálně)" : ""}`, "info");
 };
 
-const handleModal: SubHandler = (deps, rest, ctx) => {
+const handleModal: SubHandler = (deps, rest, ctx, isGlobal) => {
 	const value = numberArg(rest[0]);
 	if (value === undefined) {
 		ctx.ui.notify("Použití: /mcp-viz modal <ms>", "warning");
 		return;
 	}
-	ctx.ui.notify(`modal auto-dismiss: ${deps.patchConfig({ modalDelayMs: value }).modalDelayMs}ms`, "info");
+	ctx.ui.notify(`modal auto-dismiss: ${deps.patchConfig({ modalDelayMs: value }, isGlobal).modalDelayMs}ms${isGlobal ? " (globálně)" : ""}`, "info");
 };
 
-const handleTtl: SubHandler = (deps, rest, ctx) => {
+const handleTtl: SubHandler = (deps, rest, ctx, isGlobal) => {
 	const value = numberArg(rest[0]);
 	if (value === undefined) {
 		ctx.ui.notify("Použití: /mcp-viz ttl <ms> (0 = držet do dalšího volání)", "warning");
 		return;
 	}
-	ctx.ui.notify(`status ttl: ${deps.patchConfig({ statusTtlMs: value }).statusTtlMs}ms`, "info");
+	ctx.ui.notify(`status ttl: ${deps.patchConfig({ statusTtlMs: value }, isGlobal).statusTtlMs}ms${isGlobal ? " (globálně)" : ""}`, "info");
 };
 
-const handleDetail: SubHandler = (deps, rest, ctx) => {
+const handleDetail: SubHandler = (deps, rest, ctx, isGlobal) => {
 	const value = numberArg(rest[0]);
 	if (value !== 0 && value !== 1 && value !== 2) {
 		ctx.ui.notify("Použití: /mcp-viz detail <0|1|2>", "warning");
 		return;
 	}
-	deps.patchConfig({ detail: value });
-	ctx.ui.notify(`detail: ${value}`, "info");
+	deps.patchConfig({ detail: value }, isGlobal);
+	ctx.ui.notify(`detail: ${value}${isGlobal ? " (globálně)" : ""}`, "info");
 };
 
-const handleServer: SubHandler = (deps, rest, ctx) => {
+const handleServer: SubHandler = (deps, rest, ctx, isGlobal) => {
 	const [rawAction = "", name = ""] = rest.map((token) => token.toLowerCase());
 	const config = deps.getConfig();
 
 	if (rawAction === "clear") {
-		deps.patchConfig({ includeServers: [], excludeServers: [] });
+		deps.patchConfig({ includeServers: [], excludeServers: [] }, isGlobal);
 		ctx.ui.notify("filtry serverů vyčištěny (vše povoleno)", "info");
 		return;
 	}
@@ -181,8 +155,8 @@ const handleServer: SubHandler = (deps, rest, ctx) => {
 		exclude.add(name);
 		include.delete(name);
 	}
-	deps.patchConfig({ includeServers: [...include], excludeServers: [...exclude] });
-	ctx.ui.notify(`server ${name}: ${rawAction}`, "info");
+	deps.patchConfig({ includeServers: [...include], excludeServers: [...exclude] }, isGlobal);
+	ctx.ui.notify(`server ${name}: ${rawAction}${isGlobal ? " (globálně)" : ""}`, "info");
 };
 
 const handleStatus: SubHandler = (deps, _rest, ctx) => {
@@ -211,177 +185,6 @@ const SUBCOMMANDS: Record<string, SubHandler> = {
 	reset: handleReset,
 };
 
-// ---------------------------------------------------------- autocompletion
-
-/** Subcommands that take parameters, so their row keeps the trailing space. */
-const NON_TERMINAL = new Set(["variant", "server", "modal", "ttl", "detail"]);
-
-/**
- * Subcommands whose parameters are enumerable. The engine closes the picker on
- * Tab and forces file completion once a space exists, so these MUST return their
- * parameter list as soon as the token is fully typed (the skill's Lazy Parameter
- * Completion rule) instead of waiting for the trailing space.
- */
-const LAZY_EXPAND = new Set(["variant", "server", "detail"]);
-
-/** Variants that are currently on, for the parent-level annotation. */
-function variantsOn(config: McpVizConfig): string {
-	const on = VARIANT_NAMES.filter((name) => config.variants[name]);
-	return on.length > 0 ? on.join("+") : "none";
-}
-
-/**
- * Current-value suffix for a first-level row. Display only: markers live in
- * `label`/`description`, never in `value` (inserted verbatim), never as ANSI.
- */
-function parentState(key: string, config: McpVizConfig): string {
-	switch (key) {
-		case "on":
-			return config.enabled ? " · ● ZAPNUTO" : "";
-		case "off":
-			return config.enabled ? "" : " · ○ VYPNUTO";
-		case "variant":
-			return ` (nyní: ${variantsOn(config)})`;
-		case "modal":
-			return ` (nyní: ${config.modalDelayMs} ms)`;
-		case "ttl":
-			return ` (nyní: ${config.statusTtlMs} ms)`;
-		case "detail":
-			return ` (nyní: ${config.detail})`;
-		case "server": {
-			const parts: string[] = [];
-			if (config.includeServers.length > 0) parts.push(`include ${config.includeServers.join(", ")}`);
-			if (config.excludeServers.length > 0) parts.push(`exclude ${config.excludeServers.join(", ")}`);
-			return ` (nyní: ${parts.length > 0 ? parts.join(" · ") : "vše"})`;
-		}
-		default:
-			return "";
-	}
-}
-
-function completeFirstLevel(deps: CommandDeps, normalized: string): AutocompleteItem[] {
-	const config = deps.getConfig();
-	const items: AutocompleteItem[] = [];
-	for (const [name, description] of Object.entries(COMMAND_DOCS)) {
-		if (!name.startsWith(normalized)) continue;
-		items.push({
-			value: NON_TERMINAL.has(name) ? `${name} ` : name,
-			label: name,
-			description: `${description}${parentState(name, config)}`,
-		});
-	}
-	return items;
-}
-
-/** `/mcp-viz variant <name>` — the active variant carries `✓` and `● AKTIVNÍ`. */
-function completeVariant(deps: CommandDeps, normalized: string): AutocompleteItem[] {
-	const config = deps.getConfig();
-	return VARIANT_NAMES.map((name) => {
-		const active = config.variants[name];
-		return {
-			value: `variant ${name}`,
-			label: active ? `${name} ✓` : name,
-			description: `${active ? "Zapnuto" : "Vypnuto"} — Tab přepne${active ? " · ● AKTIVNÍ" : ""}`,
-		};
-	}).filter((item) => item.value.toLowerCase().startsWith(normalized));
-}
-
-/** `/mcp-viz detail <0|1|2>` — enumerable, so it expands without a trailing space. */
-function completeDetail(deps: CommandDeps, normalized: string): AutocompleteItem[] {
-	const current = deps.getConfig().detail;
-	const levels: ReadonlyArray<readonly [0 | 1 | 2, string]> = [
-		[0, "kompaktní karta"],
-		[1, "karta + seznam dokumentů"],
-		[2, "karta + argumenty + dokumenty"],
-	];
-	return levels
-		.map(([value, text]) => ({
-			value: `detail ${value}`,
-			label: current === value ? `${value} ✓` : String(value),
-			description: `${text}${current === value ? " · ● AKTIVNÍ" : ""}`,
-		}))
-		.filter((item) => item.value.toLowerCase().startsWith(normalized));
-}
-
-/** `/mcp-viz server <include|exclude|clear> [name]`. */
-function completeServer(
-	deps: CommandDeps,
-	tokens: string[],
-	normalized: string,
-	trailingSpace: boolean,
-): AutocompleteItem[] {
-	const config = deps.getConfig();
-	const action = (tokens[1] ?? "").toLowerCase();
-	// Name level only once the action token is followed by a space or a name.
-	const atNameLevel = tokens.length >= 3 || (tokens.length === 2 && trailingSpace);
-
-	if (!atNameLevel) {
-		const actions = [
-			{
-				name: "include",
-				description: `Povolit jen vybrané servery${
-					config.includeServers.length > 0 ? ` (nyní: ${config.includeServers.join(", ")})` : ""
-				}`,
-			},
-			{
-				name: "exclude",
-				description: `Zakázat vybrané servery${
-					config.excludeServers.length > 0 ? ` (nyní: ${config.excludeServers.join(", ")})` : ""
-				}`,
-			},
-			{ name: "clear", description: "Zrušit filtry serverů (vše povoleno)" },
-		];
-		return actions
-			.filter((entry) => entry.name.startsWith(action))
-			.map((entry) => ({
-				value: entry.name === "clear" ? "server clear" : `server ${entry.name} `,
-				label: `server ${entry.name}`,
-				description: entry.description,
-			}));
-	}
-
-	const included = new Set(config.includeServers);
-	const excluded = new Set(config.excludeServers);
-	return deps
-		.getServers()
-		.map((server) => {
-			const active =
-				action === "include" ? included.has(server) : action === "exclude" ? excluded.has(server) : false;
-			return {
-				value: `server ${action} ${server}`,
-				label: active ? `${server} ✓` : server,
-				description: `server z mcp.json${active ? " · ● AKTIVNÍ" : ""}`,
-			};
-		})
-		.filter((item) => item.value.toLowerCase().startsWith(normalized));
-}
-
-/** Build the `getArgumentCompletions` function for `/mcp-viz`. */
-export function createCompletions(deps: CommandDeps) {
-	return (prefix: string): AutocompleteItem[] | null => {
-		const tokens = prefix.split(/\s+/).filter(Boolean);
-		const trailingSpace = /\s$/.test(prefix);
-		const normalized = tokens.join(" ").toLowerCase();
-		const head = (tokens[0] ?? "").toLowerCase();
-		const deeper =
-			tokens.length > 1 ||
-			(trailingSpace && tokens.length === 1) ||
-			(tokens.length === 1 && LAZY_EXPAND.has(head));
-
-		if (!deeper) {
-			const items = completeFirstLevel(deps, normalized);
-			return items.length > 0 ? items : null;
-		}
-
-		let items: AutocompleteItem[] = [];
-		if (head === "variant") items = completeVariant(deps, normalized);
-		else if (head === "detail") items = completeDetail(deps, normalized);
-		else if (head === "server") items = completeServer(deps, tokens, normalized, trailingSpace);
-
-		return items.length > 0 ? items : null;
-	};
-}
-
 /** Register the control command. */
 export function registerMcpVizCommand(pi: ExtensionAPI, deps: CommandDeps): void {
 	pi.registerCommand("mcp-viz", {
@@ -390,9 +193,11 @@ export function registerMcpVizCommand(pi: ExtensionAPI, deps: CommandDeps): void
 
 		handler: async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
 			const tokens = args.trim().split(/\s+/).filter(Boolean);
-			const [sub = ""] = tokens;
+			const isGlobal = tokens.some((t) => t.toLowerCase() === "--global");
+			const cleanTokens = tokens.filter((t) => t.toLowerCase() !== "--global");
+			const [sub = ""] = cleanTokens;
 			const command = sub.toLowerCase();
-			const rest = tokens.slice(1);
+			const rest = cleanTokens.slice(1);
 			const config = deps.getConfig();
 
 			if (command === "" || command === "help" || command === "-h" || command === "--help") {
@@ -401,8 +206,8 @@ export function registerMcpVizCommand(pi: ExtensionAPI, deps: CommandDeps): void
 			}
 
 			if (command === "on" || command === "off") {
-				const next = deps.patchConfig({ enabled: command === "on" });
-				ctx.ui.notify(`MCP viz ${next.enabled ? "zapnuto" : "vypnuto"} — ${describeConfig(next)}`, "info");
+				const next = deps.patchConfig({ enabled: command === "on" }, isGlobal);
+				ctx.ui.notify(`MCP viz ${next.enabled ? "zapnuto" : "vypnuto"} (${isGlobal ? "globálně" : "do projektu"}) — ${describeConfig(next)}`, "info");
 				return;
 			}
 
@@ -411,7 +216,7 @@ export function registerMcpVizCommand(pi: ExtensionAPI, deps: CommandDeps): void
 				ctx.ui.notify(`Neznámý příkaz „${sub}“. Použij: /mcp-viz help`, "warning");
 				return;
 			}
-			handler(deps, rest, ctx);
+			handler(deps, rest, ctx, isGlobal);
 		},
 	});
 }

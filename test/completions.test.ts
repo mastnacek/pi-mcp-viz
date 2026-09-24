@@ -153,3 +153,15 @@ test("markers never leak into item.value and no ANSI is embedded", () => {
 		}
 	}
 });
+
+test("--global prefix preserves child completions", () => {
+	const items = complete("--global ");
+	assert.ok(items.length > 0);
+	assert.ok(items.some((i) => i.value === "--global variant "));
+	assert.ok(items.some((i) => i.value === "--global modal "));
+
+	const variantItems = complete("--global variant ");
+	assert.ok(variantItems.length > 0);
+	assert.ok(variantItems.some((i) => i.value === "--global variant entry"));
+	assert.ok(variantItems.some((i) => i.value === "--global variant modal"));
+});

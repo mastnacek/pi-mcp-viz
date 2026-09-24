@@ -31,9 +31,18 @@ export const DEFAULT_CONFIG: McpVizConfig = {
 
 /** Override for tests; unset in normal use. */
 export const CONFIG_ENV = "PI_MCP_VIZ_CONFIG";
+export const GLOBAL_CONFIG_FILE = join(homedir(), ".pi", "agent", "pi-mcp-viz.json");
+
+export function globalConfigPath(): string {
+	return process.env[CONFIG_ENV] ?? GLOBAL_CONFIG_FILE;
+}
 
 export function configPath(): string {
-	return process.env[CONFIG_ENV] ?? join(homedir(), ".pi", "agent", "pi-mcp-viz.json");
+	return globalConfigPath();
+}
+
+export function projectConfigPath(cwd: string): string {
+	return join(cwd, ".pi", "pi-mcp-viz.json");
 }
 
 function asBoolean(value: unknown, fallback: boolean): boolean {
@@ -79,20 +88,33 @@ export function normalizeConfig(raw: unknown): McpVizConfig {
 	};
 }
 
-/** Read the config, falling back to defaults on any problem. */
-export function loadConfig(): McpVizConfig {
-	const path = configPath();
-	if (!existsSync(path)) return normalizeConfig({});
-	try {
-		return normalizeConfig(JSON.parse(readFileSync(path, "utf8")));
-	} catch {
-		return normalizeConfig({});
+/** Read the config with cascade: defaults <- global <- project. */
+export function loadConfig(cwd?: string): McpVizConfig {
+	let base = normalizeConfig({});
+	const gPath = globalConfigPath();
+	if (existsSync(gPath)) {
+		try {
+			base = normalizeConfig({ ...base, ...JSON.parse(readFileSync(gPath, "utf8")) });
+		} catch {
+			// fallback
+		}
 	}
+	if (cwd) {
+		const pPath = projectConfigPath(cwd);
+		if (existsSync(pPath)) {
+			try {
+				base = normalizeConfig({ ...base, ...JSON.parse(readFileSync(pPath, "utf8")) });
+			} catch {
+				// fallback
+			}
+		}
+	}
+	return base;
 }
 
-/** Write the config (creating ~/.pi/agent when needed). */
-export function saveConfig(config: McpVizConfig): void {
-	const path = configPath();
+/** Write the config with cascade support (global if isGlobal, else project). */
+export function saveConfig(config: McpVizConfig, isGlobal = false, cwd?: string): void {
+	const path = isGlobal || !cwd ? globalConfigPath() : projectConfigPath(cwd);
 	mkdirSync(dirname(path), { recursive: true });
 	writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }
